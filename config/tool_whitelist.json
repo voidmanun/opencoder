@@ -1,0 +1,24 @@
+{
+  "default_allowed": [
+    "read",
+    "glob",
+    "grep",
+    "lsp_goto_definition",
+    "lsp_find_references",
+    "lsp_symbols",
+    "lsp_diagnostics",
+    "websearch_web_search_exa",
+    "webfetch",
+    "context7_resolve-library-id",
+    "context7_query-docs"
+  ],
+  "default_blocked": [
+    "bash",
+    "interactive_bash",
+    "write",
+    "edit",
+    "ast_grep_replace"
+  ],
+  "user_overrides": {},
+  "project_overrides": {}
+}
