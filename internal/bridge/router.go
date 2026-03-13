@@ -98,7 +98,8 @@ func (r *Router) HandleMessage(ctx context.Context, msg *dingtalk.ReceivedMessag
 		return nil
 	}
 
-	if msg.IsGroupChat() && !strings.Contains(content, "@") {
+	if msg.IsGroupChat() && !msg.IsInAtList {
+		logger.Debugf("Ignoring group message without @ mention")
 		return nil
 	}
 	content = r.stripMention(content)

@@ -32,6 +32,8 @@ type ReceivedMessage struct {
 	ChatbotCorpID           string
 	SenderCorpID            string
 	CreateAt                int64
+	AtUsers                 []string
+	IsInAtList              bool
 }
 
 type Client struct {
@@ -129,6 +131,11 @@ func (c *Client) parseMessage(data *chatbot.BotCallbackDataModel) *ReceivedMessa
 		ChatbotCorpID:           data.ChatbotCorpId,
 		SenderCorpID:            data.SenderCorpId,
 		CreateAt:                data.CreateAt,
+		IsInAtList:              data.IsInAtList,
+	}
+
+	for _, atUser := range data.AtUsers {
+		msg.AtUsers = append(msg.AtUsers, atUser.DingtalkId)
 	}
 
 	switch data.Msgtype {
