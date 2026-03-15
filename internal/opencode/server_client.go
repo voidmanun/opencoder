@@ -186,6 +186,17 @@ func (c *ServerClient) SendMessage(ctx context.Context, sessionID string, conten
 		},
 	}
 
+	// Only include model if configured
+	if c.providerID != "" && c.modelID != "" {
+		body.Model = &ModelSpec{
+			ProviderID: c.providerID,
+			ModelID:    c.modelID,
+		}
+	}
+	if c.agent != "" {
+		body.Agent = c.agent
+	}
+
 	respBody, err := c.doRequest(ctx, "POST", "/session/"+sessionID+"/message", body)
 	if err != nil {
 		return nil, err

@@ -115,8 +115,12 @@ func (r *Router) HandleMessage(ctx context.Context, msg *dingtalk.ReceivedMessag
 			Mode:               r.config.BridgeMode,
 		}
 		r.sessionStore.Set(sessionKey, sess)
-		// Log sanitized webhook for debugging without leaking sensitive data
 		logger.Debugf("Initialized session: webhook=%s", sanitizeWebhook(sess.DingSessionWebhook))
+	} else {
+		// Update webhook on every message (webhooks can expire)
+		sess.DingSessionWebhook = msg.SessionWebhook
+		r.sessionStore.Set(sessionKey, sess)
+		logger.Debugf("Updated session webhook: %s", sanitizeWebhook(sess.DingSessionWebhook))
 	}
 
 	// Log a concise summary of the incoming message at info level,
@@ -158,7 +162,7 @@ func (r *Router) handleAdvancedMode(ctx context.Context, sess *session.Session, 
 
 	if sess.OpenCodeSessionID == "" {
 		logger.Infof("handleAdvancedMode: creating OpenCode session...")
-		ocSession, err := r.opencodeClient.CreateSession(ctx, "", "/Users/voidman/Documents/git_dir/opencoder")
+		ocSession, err := r.opencodeClient.CreateSession(ctx, "", r.config.BridgeWorkDir)
 		if err != nil {
 			r.updateCardWithError(cardBizID, err.Error())
 			return fmt.Errorf("failed to create opencode session: %w", err)
@@ -182,31 +186,46 @@ func (r *Router) handleAdvancedMode(ctx context.Context, sess *session.Session, 
 
 func (r *Router) handleMVPMode(ctx context.Context, sess *session.Session, msg *dingtalk.ReceivedMessage, content string) error {
 	if sess.OpenCodeSessionID == "" {
-		ocSession, err := r.opencodeClient.CreateSession(ctx, "", "/Users/voidman/Documents/git_dir/opencoder")
+		logger.Infof("handleMVPMode: creating new OpenCode session...")
+		ocSession, err := r.opencodeClient.CreateSession(ctx, "", r.config.BridgeWorkDir)
 		if err != nil {
+			logger.Errorf("handleMVPMode: failed to create session: %v", err)
 			r.replier.ReplyText(ctx, msg.SessionWebhook, fmt.Sprintf("Error: %v", err))
 			return err
 		}
 		sess.OpenCodeSessionID = ocSession.ID
 		r.sessionStore.Set(msg.SessionKey(), sess)
+		logger.Infof("handleMVPMode: session created, id=%s", ocSession.ID)
 	}
 
+	logger.Infof("handleMVPMode: sending message to session %s", sess.OpenCodeSessionID)
 	respMsg, err := r.opencodeClient.SendMessage(ctx, sess.OpenCodeSessionID, content)
 	if err != nil {
+		logger.Errorf("handleMVPMode: failed to send message: %v", err)
 		r.replier.ReplyText(ctx, msg.SessionWebhook, fmt.Sprintf("Error: %v", err))
 		return err
 	}
 
+	logger.Infof("handleMVPMode: got response with %d parts", len(respMsg.Parts))
 	var responseText strings.Builder
-	for _, part := range respMsg.Parts {
+	for i, part := range respMsg.Parts {
+		logger.Debugf("handleMVPMode: part[%d] type=%s", i, part.Type)
 		if part.Type == "text" && part.Text != "" {
 			responseText.WriteString(part.Text)
 		}
 	}
 
 	if responseText.Len() > 0 {
-		return r.replier.ReplyMarkdown(ctx, msg.SessionWebhook, "OpenCode Response", responseText.String())
+		logger.Infof("handleMVPMode: sending reply, length=%d, webhook=%s", responseText.Len(), sanitizeWebhook(sess.DingSessionWebhook))
+		err := r.replier.ReplyMarkdown(ctx, sess.DingSessionWebhook, "OpenCode Response", responseText.String())
+		if err != nil {
+			logger.Errorf("handleMVPMode: failed to reply markdown: %v", err)
+		} else {
+			logger.Infof("handleMVPMode: reply sent successfully")
+		}
+		return err
 	}
+	logger.Infof("handleMVPMode: no text output, sending fallback reply")
 	return r.replier.ReplyText(ctx, msg.SessionWebhook, "Task completed (no text output)")
 }
 
